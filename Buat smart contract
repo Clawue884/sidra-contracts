@@ -1,0 +1,116 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+// Interface UniswapV2
+interface IUniswapV2Router {
+    function swapExactTokensForTokens(
+        uint amountIn,
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external returns (uint[] memory amounts);
+
+    function addLiquidity(
+        address tokenA,
+        address tokenB,
+        uint amountADesired,
+        uint amountBDesired,
+        uint amountAMin,
+        uint amountBMin,
+        address to,
+        uint deadline
+    ) external returns (uint amountA, uint amountB, uint liquidity);
+}
+
+// Interface DEX lain bisa ditambahkan sesuai kebutuhan
+
+contract MultiDEXAggregator {
+
+    address public owner;
+    mapping(address => bool) public dexRouters;
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only owner can call this function");
+        _;
+    }
+
+    function addDexRouter(address _router) external onlyOwner {
+        dexRouters[_router] = true;
+    }
+
+    function removeDexRouter(address _router) external onlyOwner {
+        dexRouters[_router] = false;
+    }
+
+    function swapOnMultipleDEX(
+        address[] memory routers,
+        address tokenIn,
+        address tokenOut,
+        uint amountIn,
+        uint amountOutMin,
+        uint deadline
+    ) external {
+        require(routers.length > 0, "No DEX Routers provided");
+
+        uint remainingAmountIn = amountIn;
+        for (uint i = 0; i < routers.length; i++) {
+            require(dexRouters[routers[i]], "Invalid DEX Router");
+            IUniswapV2Router router = IUniswapV2Router(routers[i]);
+
+            address0;
+            path[0] = tokenIn;
+            path[1] = tokenOut;
+
+            uint amountToSwap = remainingAmountIn / (routers.length - i);
+            router.swapExactTokensForTokens(
+                amountToSwap,
+                amountOutMin,
+                path,
+                msg.sender,
+                deadline
+            );
+            remainingAmountIn -= amountToSwap;
+        }
+    }
+
+    function provideLiquidityOnMultipleDEX(
+        address[] memory routers,
+        address tokenA,
+        address tokenB,
+        uint amountADesired,
+        uint amountBDesired,
+        uint deadline
+    ) external {
+        require(routers.length > 0, "No DEX Routers provided");
+
+        uint remainingAmountA = amountADesired;
+        uint remainingAmountB = amountBDesired;
+
+        for (uint i = 0; i < routers.length; i++) {
+            require(dexRouters[routers[i]], "Invalid DEX Router");
+            IUniswapV2Router router = IUniswapV2Router(routers[i]);
+
+            uint amountAForLiquidity = remainingAmountA / (routers.length - i);
+            uint amountBForLiquidity = remainingAmountB / (routers.length - i);
+
+            router.addLiquidity(
+                tokenA,
+                tokenB,
+                amountAForLiquidity,
+                amountBForLiquidity,
+                1, // Minimal amountA
+                1, // Minimal amountB
+                msg.sender,
+                deadline
+            );
+
+            remainingAmountA -= amountAForLiquidity;
+            remainingAmountB -= amountBForLiquidity;
+        }
+    }
+}
