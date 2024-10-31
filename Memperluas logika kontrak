@@ -1,0 +1,134 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+// Interface UniswapV2
+interface IUniswapV2Router {
+    function swapExactTokensForTokens(
+        uint amountIn,
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external returns (uint[] memory amounts);
+    function addLiquidity(
+        address tokenA,
+        address tokenB,
+        uint amountADesired,
+        uint amountBDesired,
+        uint amountAMin,
+        uint amountBMin,
+        address to,
+        uint deadline
+    ) external returns (uint amountA, uint amountB, uint liquidity);
+}
+
+interface IERC20 {
+    function approve(address spender, uint amount) external returns (bool);
+    function transferFrom(address sender, address recipient, uint amount) external returns (bool);
+}
+
+contract MultiDEXAggregator {
+    address public owner;
+    mapping(address => bool) public dexRouters;
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only owner can call this function");
+        _;
+    }
+
+    // Fungsi untuk menambahkan router DEX baru
+    function addDexRouter(address _router) external onlyOwner {
+        dexRouters[_router] = true;
+    }
+
+    // Fungsi untuk menghapus router DEX
+    function removeDexRouter(address _router) external onlyOwner {
+        dexRouters[_router] = false;
+    }
+
+    // Fungsi swap token pada beberapa DEX
+    function swapOnMultipleDEX(
+        address[] memory routers,
+        address tokenIn,
+        address tokenOut,
+        uint amountIn,
+        uint amountOutMin,
+        uint deadline
+    ) external {
+        require(routers.length > 0, "No DEX Routers provided");
+        uint remainingAmountIn = amountIn;
+        for (uint i = 0; i < routers.length; i++) {
+            require(dexRouters[routers[i]], "Invalid DEX Router");
+            IUniswapV2Router router = IUniswapV2Router(routers[i]);
+
+            address0;
+            path[0] = tokenIn;
+            path[1] = tokenOut;
+
+            uint amountToSwap = remainingAmountIn / (routers.length - i);
+
+            IERC20(tokenIn).transferFrom(msg.sender, address(this), amountToSwap);
+            IERC20(tokenIn).approve(address(router), amountToSwap);
+
+            router.swapExactTokensForTokens(
+                amountToSwap,
+                amountOutMin,
+                path,
+                msg.sender,
+                deadline
+            );
+
+            remainingAmountIn -= amountToSwap;
+        }
+    }
+
+    // Fungsi menambahkan likuiditas pada beberapa DEX
+    function provideLiquidityOnMultipleDEX(
+        address[] memory routers,
+        address tokenA,
+        address tokenB,
+        uint amountADesired,
+        uint amountBDesired,
+        uint deadline
+    ) external {
+        require(routers.length > 0, "No DEX Routers provided");
+        uint remainingAmountA = amountADesired;
+        uint remainingAmountB = amountBDesired;
+        for (uint i = 0; i < routers.length; i++) {
+            require(dexRouters[routers[i]], "Invalid DEX Router");
+            IUniswapV2Router router = IUniswapV2Router(routers[i]);
+
+            uint amountAForLiquidity = remainingAmountA / (routers.length - i);
+            uint amountBForLiquidity = remainingAmountB / (routers.length - i);
+
+            IERC20(tokenA).transferFrom(msg.sender, address(this), amountAForLiquidity);
+            IERC20(tokenB).transferFrom(msg.sender, address(this), amountBForLiquidity);
+
+            IERC20(tokenA).approve(address(router), amountAForLiquidity);
+            IERC20(tokenB).approve(address(router), amountBForLiquidity);
+
+            router.addLiquidity(
+                tokenA,
+                tokenB,
+                amountAForLiquidity,
+                amountBForLiquidity,
+                1, // Minimal amountA
+                1, // Minimal amountB
+                msg.sender,
+                deadline
+            );
+
+            remainingAmountA -= amountAForLiquidity;
+            remainingAmountB -= amountBForLiquidity;
+        }
+    }
+
+    // Fungsi untuk menarik token yang tersisa dari kontrak
+    function withdrawToken(address token, uint amount) external onlyOwner {
+        IERC20(token).transfer(msg.sender, amount);
+    }
+}
